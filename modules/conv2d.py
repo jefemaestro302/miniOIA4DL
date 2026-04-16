@@ -2,6 +2,7 @@ from modules.layer import Layer
 from modules.utils import *
 from cython_modules.im2col import im2col_forward_cython
 from cython_modules.gemm import gemm_blocked_hpc
+from cython_modules.competition import im2col_parallel, gemm_parallel_blocked
 
 import numpy as np
 
@@ -22,6 +23,8 @@ class Conv2D(Layer):
             self.mode = 'im2col_cython' # Nivel Medio (Cython)
         elif conv_algo == 3:
             self.mode = 'gemm_blocked' # Nivel Avanzado (Blocked GEMM)
+        elif conv_algo == 4:
+            self.mode = 'competition' # Nivel Competitivo (Parallel + Blocked)
         else:
             print(f"Algoritmo {conv_algo} no soportado aún")
             self.mode = 'direct' 
@@ -73,6 +76,8 @@ class Conv2D(Layer):
             return self._forward_im2col_cython(input)
         elif self.mode == 'gemm_blocked':
             return self._forward_gemm_blocked(input)
+        elif self.mode == 'competition':
+            return self._forward_competition(input)
         else:
             raise ValueError(f"Mode {self.mode} not supported")
 
@@ -151,6 +156,32 @@ class Conv2D(Layer):
         output_flat += self.biases.reshape(-1, 1)
         
         # 5. Re-formatear a tensor de salida (N, OutC, OutH, OutW)
+        out_h = (input.shape[2] + 2 * self.padding - k_h) // self.stride + 1
+        out_w = (input.shape[3] + 2 * self.padding - k_w) // self.stride + 1
+        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
+        return output.transpose(1, 0, 2, 3)
+        # // FIN BLOQUE GENERADO CON IA
+
+    def _forward_competition(self, input):
+        # // INICIO BLOQUE GENERADO CON IA
+        # NIVEL COMPETITIVO: Parallel im2col (Cython) + np.dot (BLAS)
+        batch_size = input.shape[0]
+        k_h, k_w = self.kernel_size, self.kernel_size
+        
+        # 1. im2col paralelo (altamente optimizado en Cython, evita np.pad)
+        # Aseguramos float32 una sola vez
+        if input.dtype != np.float32:
+            input_f32 = input.astype(np.float32)
+        else:
+            input_f32 = input
+
+        input_cols = im2col_parallel(input_f32, k_h, k_w, self.stride, self.padding)
+        
+        # 2. GEMM usando np.dot (BLAS)
+        weights_reshaped = self.kernels.reshape(self.out_channels, -1)
+        output_flat = np.dot(weights_reshaped, input_cols) + self.biases.reshape(-1, 1)
+        
+        # 3. Reshape y transpose final
         out_h = (input.shape[2] + 2 * self.padding - k_h) // self.stride + 1
         out_w = (input.shape[3] + 2 * self.padding - k_w) // self.stride + 1
         output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)

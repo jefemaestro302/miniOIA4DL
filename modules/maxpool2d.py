@@ -1,5 +1,5 @@
 from modules.layer import Layer
-#from cython_modules.maxpool2d import maxpool_forward_cython
+from cython_modules.competition import maxpool2d_parallel
 import numpy as np
 
 class MaxPool2D(Layer):
@@ -9,41 +9,8 @@ class MaxPool2D(Layer):
 
     def forward(self, input, training=True):  # input: np.ndarray of shape [B, C, H, W]
         # // INICIO BLOQUE GENERADO CON IA
-        # IMPLEMENTACIÓN ORIGINAL (4 bucles anidados en Python)
-        # self.input = input
-        # B, C, H, W = input.shape
-        # KH, KW = self.kernel_size, self.kernel_size
-        # SH, SW = self.stride, self.stride
-        # out_h = (H - KH) // SH + 1
-        # out_w = (W - KW) // SW + 1
-        # self.max_indices = np.zeros((B, C, out_h, out_w, 2), dtype=int)
-        # output = np.zeros((B, C, out_h, out_w),dtype=input.dtype)
-        # for b in range(B):
-        #     for c in range(C):
-        #         for i in range(out_h):
-        #             for j in range(out_w):
-        #                 h_start = i * SH
-        #                 h_end = h_start + KH
-        #                 w_start = j * SW
-        #                 w_end = w_start + KW
-        #                 window = input[b, c, h_start:h_end, w_start:w_end]
-        #                 max_idx = np.unravel_index(np.argmax(window), window.shape)
-        #                 max_val = window[max_idx]
-        #                 output[b, c, i, j] = max_val
-        #                 self.max_indices[b, c, i, j] = (h_start + max_idx[0], w_start + max_idx[1])
-        # return output
-
-        # IMPLEMENTACIÓN OPTIMIZADA (Nivel Básico: sliding_window_view)
-        self.input = input
-        B, C, H, W = input.shape
-        KH, KW = self.kernel_size, self.kernel_size
-        SH, SW = self.stride, self.stride
-
-        from numpy.lib.stride_tricks import sliding_window_view
-        windows = sliding_window_view(input, (KH, KW), axis=(2, 3))
-        windows = windows[:, :, ::SH, ::SW]
-        output = np.max(windows, axis=(4, 5))
-        return output
+        # NIVEL COMPETITIVO: MaxPool2D paralelo en Cython
+        return maxpool2d_parallel(input.astype(np.float32), self.kernel_size, self.stride)
         # // FIN BLOQUE GENERADO CON IA
 
     def backward(self, grad_output, learning_rate=None):
