@@ -1,6 +1,7 @@
 from modules.layer import Layer
 from modules.utils import *
-#from cython_modules.im2col import im2col_forward_cython
+from cython_modules.im2col import im2col_forward_cython
+from cython_modules.gemm import gemm_blocked_hpc
 
 import numpy as np
 
@@ -15,6 +16,12 @@ class Conv2D(Layer):
         # MODIFICAR: Añadir nuevo if-else para otros algoritmos de convolución
         if conv_algo == 0:
             self.mode = 'direct' 
+        elif conv_algo == 1:
+            self.mode = 'im2col_basic' # Nivel Básico (NumPy)
+        elif conv_algo == 2:
+            self.mode = 'im2col_cython' # Nivel Medio (Cython)
+        elif conv_algo == 3:
+            self.mode = 'gemm_blocked' # Nivel Avanzado (Blocked GEMM)
         else:
             print(f"Algoritmo {conv_algo} no soportado aún")
             self.mode = 'direct' 
@@ -60,8 +67,95 @@ class Conv2D(Layer):
         # PISTA: Usar estos if-else si implementas más algoritmos de convolución
         if self.mode == 'direct':
             return self._forward_direct(input)
+        elif self.mode == 'im2col_basic':
+            return self._forward_im2col_basic(input)
+        elif self.mode == 'im2col_cython':
+            return self._forward_im2col_cython(input)
+        elif self.mode == 'gemm_blocked':
+            return self._forward_gemm_blocked(input)
         else:
-            raise ValueError("Mode must be 'direct")
+            raise ValueError(f"Mode {self.mode} not supported")
+
+    def _forward_im2col_basic(self, input):
+        # NIVEL BÁSICO: im2col usando NumPy (sin Cython)
+        batch_size, channels, in_h, in_w = input.shape
+        k_h, k_w = self.kernel_size, self.kernel_size
+        out_h = (in_h + 2 * self.padding - k_h) // self.stride + 1
+        out_w = (in_w + 2 * self.padding - k_w) // self.stride + 1
+        
+        if self.padding > 0:
+            input_padded = np.pad(input, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant').astype(np.float32)
+        else:
+            input_padded = input
+            
+        # Utilizamos operaciones vectorizadas de NumPy para extraer las ventanas
+        from numpy.lib.stride_tricks import sliding_window_view
+        # Extraemos todas las posibles ventanas de k_h x k_w
+        windows = sliding_window_view(input_padded, (k_h, k_w), axis=(2, 3))
+        # Aplicamos el stride (saltos)
+        windows = windows[:, :, ::self.stride, ::self.stride, :, :]
+        # Reordenamos dimensiones para alinear: Batch -> OutH -> OutW
+        windows = windows.transpose(1, 4, 5, 0, 2, 3)
+        # Aplanamos en la matriz de columnas
+        input_cols = windows.reshape(channels * k_h * k_w, batch_size * out_h * out_w)
+        
+        weights_reshaped = self.kernels.reshape(self.out_channels, -1)
+        output_flat = np.dot(weights_reshaped, input_cols) + self.biases.reshape(-1, 1)
+        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
+        return output.transpose(1, 0, 2, 3)
+
+    def _forward_im2col_cython(self, input):
+        # NIVEL MEDIO: im2col usando Cython
+        batch_size = input.shape[0]
+        k_h, k_w = self.kernel_size, self.kernel_size
+        
+        # Calcular dimensiones de salida
+        out_h = (input.shape[2] + 2 * self.padding - k_h) // self.stride + 1
+        out_w = (input.shape[3] + 2 * self.padding - k_w) // self.stride + 1
+
+        # 1. Transformar entrada a matriz de columnas usando Cython
+        input_cols = im2col_forward_cython(input, k_h, k_w, self.stride, self.padding)
+        
+        # 2. Reshape de los pesos a (OutChannels, InChannels * Kh * Kw)
+        weights_reshaped = self.kernels.reshape(self.out_channels, -1)
+        
+        # 3. Multiplicación de matrices (GEMM) + Suma del Bias
+        output_flat = np.dot(weights_reshaped, input_cols) + self.biases.reshape(-1, 1)
+        
+        # 4. Re-formatear a tensor de salida (N, OutC, OutH, OutW)
+        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
+        return output.transpose(1, 0, 2, 3)
+
+    def _forward_gemm_blocked(self, input):
+        # // INICIO BLOQUE GENERADO CON IA
+        # NIVEL ALTO: im2col + Custom Blocked GEMM
+        batch_size = input.shape[0]
+        k_h, k_w = self.kernel_size, self.kernel_size
+        
+        # 1. Transformar entrada a matriz de columnas usando Cython
+        input_cols = im2col_forward_cython(input, k_h, k_w, self.stride, self.padding)
+        
+        # 2. Preparar matrices para GEMM
+        A = self.kernels.reshape(self.out_channels, -1).astype(np.float32) # (M, K)
+        B = input_cols.astype(np.float32) # (K, N)
+        M, K = A.shape
+        N = B.shape[1]
+        
+        # Pre-preparar matriz de salida
+        C = np.zeros((M, N), dtype=np.float32)
+        
+        # 3. Llamar al motor GEMM avanzado
+        output_flat = gemm_blocked_hpc(A, B, C, self.mc, self.nc, self.kc, self.mr, self.nr)
+        
+        # 4. Sumar biases (broadcast)
+        output_flat += self.biases.reshape(-1, 1)
+        
+        # 5. Re-formatear a tensor de salida (N, OutC, OutH, OutW)
+        out_h = (input.shape[2] + 2 * self.padding - k_h) // self.stride + 1
+        out_w = (input.shape[3] + 2 * self.padding - k_w) // self.stride + 1
+        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
+        return output.transpose(1, 0, 2, 3)
+        # // FIN BLOQUE GENERADO CON IA
 
     def backward(self, grad_output, learning_rate):
         # ESTO NO ES NECESARIO YA QUE NO VAIS A HACER BACKPROPAGATION

@@ -1,0 +1,30 @@
+# Entornos virtuales
+cython_modules/entorno-oia/
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cython y compilación C
+build/
+*.so
+cython_modules/*.c
+cython_modules/*.html
+cython_modules/build/
+
+# Archivos de sistema y documentos
+.DS_Store
+Thumbs.db
+*.pdf
+
+# Archivos de control de IA y seguimiento
+memoria.md
+GEMINI.md
+ignore.md
+directorios.txt
+explicaciones/
+profile_detail.py
