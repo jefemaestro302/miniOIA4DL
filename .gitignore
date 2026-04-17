@@ -29,3 +29,7 @@ directorios.txt
 explicaciones/
 profile_detail.py
 optimizacion/
+explicaciones/
+unit_tests/
+cython_modules/benchmark*
+cython_modules/setup.py
