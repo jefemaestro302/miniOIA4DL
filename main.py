@@ -8,7 +8,7 @@ from eval import evaluate
 from performance import perf
 from data.cifar100_augmentator import CIFAR100Augmentor
 
-def main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, eval_only):
+def main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, eval_only, force_inef=False):
     # !!Asegurarse de la ruta del dataset
     (train_images, train_labels), (test_images, test_labels) = load_cifar100(data_dir='./data/cifar-100-python')
 
@@ -29,7 +29,7 @@ def main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, 
         model = ResNet18_CIFAR100(conv_algo=conv_algo)
 
     # Solamente se va a utilizar esta función para medir el rendimiento
-    if performance:
+    if performance and not eval_only:
         print("Measuring performance...")
         perf(model, train_images, train_labels, batch_size=batch_size)
     else: 
@@ -37,7 +37,11 @@ def main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, 
             train(model, train_images, train_labels, epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
               save_path=f'saved_models/{model_name}', resume=True, test_images=test_images, test_labels=test_labels, augmentor=augmentor)
         else:
-            _,_ = evaluate(model, test_images, test_labels, save_path=f'saved_models/{model_name}')
+            # // INICIO BLOQUE GENERADO CON IA
+            # No cargamos pesos para medir performance si no existen
+            load_m = not performance
+            _,_ = evaluate(model, test_images, test_labels, save_path=f'saved_models/{model_name}', load_model=load_m, force_inefficient_matmul=force_inef)
+            # // FIN BLOQUE GENERADO CON IA
 
 if __name__ == '__main__':
 
@@ -51,15 +55,13 @@ if __name__ == '__main__':
     parser.add_argument('--performance', action='store_true', help='Enable performance measurement')
     parser.add_argument('--eval_only', action='store_true', help='Enable evaluation-only mode')
     parser.add_argument('--conv_algo', type=int, default=0, choices=[0,1,2,3,4], help='Conv2d algorithm 0-direct, 1-im2col, 2-im2col_cython, 3-gemm_blocked, 4-competition (default: 0)')
-    
+    parser.add_argument('--optimized_matmul', action='store_true', default=False, help='Use optimized matmul (np.dot) in evaluation')
+
     args = parser.parse_args()
     
-    model_name = args.model
-    batch_size = args.batch_size
-    epochs = args.epochs
-    learning_rate = args.learning_rate
-    performance = True # FOR OIANET performance
-    conv_algo = args.conv_algo # PISTA: esto sirve para seleccionar nuevos algoritmos de convolucion
-    eval_only = False # FOR OIANET performance
-    
-    main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, eval_only)
+    # // INICIO BLOQUE GENERADO CON IA
+    # Si estamos en modo eval_only y pasamos performance, forzamos matmul ineficiente salvo que digamos lo contrario
+    force_inef = args.performance and not args.optimized_matmul
+    # // FIN BLOQUE GENERADO CON IA
+
+    main(args.model, args.batch_size, args.epochs, args.learning_rate, args.conv_algo, args.performance, args.eval_only, force_inef)

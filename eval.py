@@ -2,9 +2,13 @@ import time
 import sys 
 import numpy as np
 import os
+import modules.utils
 
 # NO TOCAR, NO HACE FALTA
-def evaluate(model, test_images, test_labels,save_path,load_model=True):
+def evaluate(model, test_images, test_labels,save_path,load_model=True, force_inefficient_matmul=False):
+    if force_inefficient_matmul:
+        modules.utils.OPTIMIZED_MATMUL = False
+    
     if load_model:
         if os.path.exists(save_path):
             print(f"Loading model from {save_path} ...")

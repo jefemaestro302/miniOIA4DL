@@ -32,4 +32,3 @@ optimizacion/
 explicaciones/
 unit_tests/
 cython_modules/benchmark*
-cython_modules/setup.py

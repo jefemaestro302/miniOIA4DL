@@ -82,54 +82,60 @@ class Conv2D(Layer):
             raise ValueError(f"Mode {self.mode} not supported")
 
     def _forward_im2col_basic(self, input):
-        # NIVEL BÁSICO: im2col usando NumPy (sin Cython)
-        batch_size, channels, in_h, in_w = input.shape
-        k_h, k_w = self.kernel_size, self.kernel_size
-        out_h = (in_h + 2 * self.padding - k_h) // self.stride + 1
-        out_w = (in_w + 2 * self.padding - k_w) // self.stride + 1
+        batch_size, channels, in_height, in_width = input.shape
+        kernel_height, kernel_width = self.kernel_size, self.kernel_size
+        out_heigth = (in_height + 2 * self.padding - kernel_height) //self.stride + 1
+        out_width = (in_width + 2 * self.padding - kernel_width) // self.stride + 1
         
         if self.padding > 0:
-            input_padded = np.pad(input, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant').astype(np.float32)
+            input_padded = np.pad(input, ((0,0), (0,0), (self.padding, self.padding), (self.padding, self.padding)),mode='constant').astype(np.float32)
         else:
             input_padded = input
-            
-        # Utilizamos operaciones vectorizadas de NumPy para extraer las ventanas
-        from numpy.lib.stride_tricks import sliding_window_view
-        # Extraemos todas las posibles ventanas de k_h x k_w
-        windows = sliding_window_view(input_padded, (k_h, k_w), axis=(2, 3))
-        # Aplicamos el stride (saltos)
-        windows = windows[:, :, ::self.stride, ::self.stride, :, :]
-        # Reordenamos dimensiones para alinear: Batch -> OutH -> OutW
-        windows = windows.transpose(1, 4, 5, 0, 2, 3)
-        # Aplanamos en la matriz de columnas
-        input_cols = windows.reshape(channels * k_h * k_w, batch_size * out_h * out_w)
         
-        weights_reshaped = self.kernels.reshape(self.out_channels, -1)
-        output_flat = np.dot(weights_reshaped, input_cols) + self.biases.reshape(-1, 1)
-        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
-        return output.transpose(1, 0, 2, 3)
+        # en vez de iterar con bucles for cada región, usamos Numpy para crear una vista de cada ventana de tamaño kernelxkernel
+        # explorando los ejes de altura y anchura (kernel_heigth, kernel_width)
+        from numpy.lib.stride_tricks import sliding_window_view
+        ventanas = sliding_window_view(input_padded, (kernel_height,kernel_width),axis=(2,3))
+        # el paso anterior explora pixel a pixel; esto puede no coincidir con nuestro stride, asi que nos saltamos las ventans inutiles
+        ventanas = ventanas[: , : , ::self.stride, ::self.stride, :, :]
+
+        #reordenamos la matriz para que los datos de cada ventana estén juntos 
+        # reordenamos la matriz para que los datos de cada ventana estén juntos 
+        # canales, alto_v, ancho_v, batch, alto_out, ancho_out
+        ventanas = ventanas.transpose(1,4,5,0,2,3)
+        columnas_entrada = ventanas.reshape(channels * kernel_height * kernel_width, -1)
+        #sustituimos convolucion por multiplicacion
+        pesos = self.kernels.reshape(self.out_channels, -1)
+        salida_aplanada = np.dot(pesos, columnas_entrada) + self.biases.reshape(-1,1)
+
+        #reformateamos a formato tensor
+        salida= salida_aplanada.reshape(self.out_channels, batch_size, out_heigth, out_width)
+        return salida.transpose(1, 0, 2, 3)
+
+
+        
 
     def _forward_im2col_cython(self, input):
-        # NIVEL MEDIO: im2col usando Cython
-        batch_size = input.shape[0]
-        k_h, k_w = self.kernel_size, self.kernel_size
+        # implementacion cython de i2col
+        batch_size, channels, in_height, in_width = input.shape
+        kernel_height, kernel_width = self.kernel_size, self.kernel_size
         
         # Calcular dimensiones de salida
-        out_h = (input.shape[2] + 2 * self.padding - k_h) // self.stride + 1
-        out_w = (input.shape[3] + 2 * self.padding - k_w) // self.stride + 1
+        out_heigth = (in_height + 2 * self.padding - kernel_height) //self.stride + 1
+        out_width = (in_width + 2 * self.padding - kernel_width) // self.stride + 1
 
-        # 1. Transformar entrada a matriz de columnas usando Cython
-        input_cols = im2col_forward_cython(input, k_h, k_w, self.stride, self.padding)
+        # realizamos las transformaciones con el modulo cython
+        columnas_entrada = im2col_forward_cython(input, kernel_height, kernel_width, self.stride, self.padding)
         
-        # 2. Reshape de los pesos a (OutChannels, InChannels * Kh * Kw)
-        weights_reshaped = self.kernels.reshape(self.out_channels, -1)
+    
+        pesos = self.kernels.reshape(self.out_channels, -1)
         
-        # 3. Multiplicación de matrices (GEMM) + Suma del Bias
-        output_flat = np.dot(weights_reshaped, input_cols) + self.biases.reshape(-1, 1)
+        #aplanamos la salida y realizamos la multiplicacion
+        output_flat = np.dot(pesos, columnas_entrada) + self.biases.reshape(-1, 1)
         
-        # 4. Re-formatear a tensor de salida (N, OutC, OutH, OutW)
-        output = output_flat.reshape(self.out_channels, batch_size, out_h, out_w)
-        return output.transpose(1, 0, 2, 3)
+        #volvemos al formato tensor
+        salida = output_flat.reshape(self.out_channels, batch_size, out_heigth, out_width)
+        return salida.transpose(1, 0, 2, 3)
 
     def _forward_gemm_blocked(self, input):
         # // INICIO BLOQUE GENERADO CON IA
