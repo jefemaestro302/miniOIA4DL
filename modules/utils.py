@@ -4,12 +4,11 @@ OPTIMIZED_MATMUL = True
 
 #PISTA: es esta la mejor forma de hacer una matmul?
 def matmul_biasses(A, B, C, bias, optimized=None):
-    # // INICIO BLOQUE GENERADO CON IA
     if optimized is None:
         optimized = OPTIMIZED_MATMUL
         
     if not optimized:
-        # IMPLEMENTACIÓN ORIGINAL (Ineficiente: 3 bucles anidados en Python)
+        
         m, p, n = A.shape[0], A.shape[1], B.shape[1]
         if C is None:
             C = np.zeros((m, n), dtype=np.float32)
