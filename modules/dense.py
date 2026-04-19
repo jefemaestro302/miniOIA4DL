@@ -24,15 +24,13 @@ class Dense(Layer):
         self.input = None
 
     def forward(self, input, training=True):  # input: [batch_size x in_features]
-        # // INICIO BLOQUE GENERADO CON IA
-        # IMPLEMENTACIÓN ORIGINAL (Uso de matmul_biasses con bucles)
         # self.input = np.array(input).astype(np.float32)
         # batch_size = self.input.shape[0]
         # output = np.zeros((batch_size, self.out_features),dtype=np.float32)
         # output = matmul_biasses(self.input, self.weights, output, self.biases)
         # self.output = output
         # return output
-
+        # // INICIO BLOQUE GENERADO CON IA
         # IMPLEMENTACIÓN OPTIMIZADA
         self.input = np.asarray(input, dtype=np.float32)
         self.output = matmul_biasses(self.input, self.weights, None, self.biases)
