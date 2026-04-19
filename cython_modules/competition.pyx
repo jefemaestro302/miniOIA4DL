@@ -1,4 +1,3 @@
-# // INICIO BLOQUE GENERADO CON IA
 from cython.parallel import prange
 cimport cython
 import numpy as np
@@ -7,41 +6,43 @@ cimport numpy as np
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def im2col_parallel(float[:,:,:,:] input_tensor, int kernel_h, int kernel_w, int stride, int padding):
+def im2col_parallel(float[:,:,:,:] input_tensor, int kernel_height, int kernel_width, int stride, int padding):
     cdef int batch_size = input_tensor.shape[0]
     cdef int channels = input_tensor.shape[1]
-    cdef int in_h = input_tensor.shape[2]
-    cdef int in_w = input_tensor.shape[3]
+    cdef int in_height = input_tensor.shape[2]
+    cdef int in_width = input_tensor.shape[3]
 
-    cdef int out_h = (in_h + 2 * padding - kernel_h) // stride + 1
-    cdef int out_w = (in_w + 2 * padding - kernel_w) // stride + 1
+    cdef int out_heigth = (in_height + 2 * padding - kernel_height) // stride + 1
+    cdef int out_width = (in_width + 2 * padding - kernel_width) // stride + 1
 
-    cdef int rows = channels * kernel_h * kernel_w
-    cdef int cols = batch_size * out_h * out_w
+    cdef int filas = channels * kernel_height * kernel_width
+    cdef int columnas = batch_size * out_heigth * out_width
     
-    cdef float[:, ::1] result = np.zeros((rows, cols), dtype=np.float32)
+    cdef float[:, ::1] result = np.zeros((filas, columnas), dtype=np.float32)
 
     cdef int total_iters = batch_size * channels
     cdef int it, n, c, fy, fx, oh, ow
     cdef int h_in, w_in, idx_row, idx_col_base, idx_col
 
+    # // INICIO BLOQUE GENERADO CON IA
     for it in prange(total_iters, nogil=True):
         n = it // channels
         c = it % channels
         
-        idx_col_base = n * (out_h * out_w)
+        idx_col_base = n * (out_heigth * out_width)
         
-        for fy in range(kernel_h):
-            for fx in range(kernel_w):
-                idx_row = c * (kernel_h * kernel_w) + fy * kernel_w + fx
-                for oh in range(out_h):
+        for fy in range(kernel_height):
+            for fx in range(kernel_width):
+                idx_row = c * (kernel_height * kernel_width) + fy * kernel_width + fx
+                for oh in range(out_heigth):
                     h_in = oh * stride + fy - padding
-                    if h_in >= 0 and h_in < in_h:
-                        for ow in range(out_w):
+                    if h_in >= 0 and h_in < in_height:
+                        for ow in range(out_width):
                             w_in = ow * stride + fx - padding
-                            if w_in >= 0 and w_in < in_w:
-                                idx_col = idx_col_base + oh * out_w + ow
+                            if w_in >= 0 and w_in < in_width:
+                                idx_col = idx_col_base + oh * out_width + ow
                                 result[idx_row, idx_col] = input_tensor[n, c, h_in, w_in]
+    # // FIN BLOQUE GENERADO CON IA
 
     return np.asarray(result)
 
@@ -62,7 +63,7 @@ def gemm_parallel_blocked(float[:, ::1] A, float[:, ::1] B, float[:, ::1] C,
     cdef int ii, jj, l, iii, jjj, ii_limit, jj_limit
     cdef int n_ii, n_jj, ii_idx, jj_idx
 
-    # Paralelizamos sobre los bloques de filas
+    # // INICIO BLOQUE GENERADO CON IA
     for ib in prange(n_i, nogil=True):
         i = ib * mc
         if i + mc < M:
@@ -84,7 +85,6 @@ def gemm_parallel_blocked(float[:, ::1] A, float[:, ::1] B, float[:, ::1] C,
                 else:
                     j_limit = N
                 
-                # Micro-blocking (L2/L1)
                 n_ii = (i_limit - i + mr - 1) // mr
                 for ii_idx in range(n_ii):
                     ii = i + ii_idx * mr
@@ -101,11 +101,11 @@ def gemm_parallel_blocked(float[:, ::1] A, float[:, ::1] B, float[:, ::1] C,
                         else:
                             jj_limit = j_limit
                         
-                        # Micro-kernel
                         for l in range(k, k_limit):
                             for iii in range(ii, ii_limit):
                                 for jjj in range(jj, jj_limit):
                                     C[iii, jjj] = C[iii, jjj] + A[iii, l] * B[l, jjj]
+    # // FIN BLOQUE GENERADO CON IA
 
     return np.asarray(C)
 
@@ -113,35 +113,34 @@ def gemm_parallel_blocked(float[:, ::1] A, float[:, ::1] B, float[:, ::1] C,
 @cython.wraparound(False)
 @cython.cdivision(True)
 def maxpool2d_parallel(float[:,:,:,:] input_tensor, int kernel_size, int stride):
-    cdef int B = input_tensor.shape[0]
-    cdef int C = input_tensor.shape[1]
-    cdef int H = input_tensor.shape[2]
-    cdef int W = input_tensor.shape[3]
+    cdef int batch_size = input_tensor.shape[0]
+    cdef int channels = input_tensor.shape[1]
+    cdef int in_height = input_tensor.shape[2]
+    cdef int in_width = input_tensor.shape[3]
     
-    cdef int out_h = (H - kernel_size) // stride + 1
-    cdef int out_w = (W - kernel_size) // stride + 1
+    cdef int out_heigth = (in_height - kernel_size) // stride + 1
+    cdef int out_width = (in_width - kernel_size) // stride + 1
     
-    cdef float[:,:,:,:] output = np.zeros((B, C, out_h, out_w), dtype=np.float32)
+    cdef float[:,:,:,:] salida = np.zeros((batch_size, channels, out_heigth, out_width), dtype=np.float32)
     
-    cdef int total_iters = B * C
+    cdef int total_iters = batch_size * channels
     cdef int it, b, c, i, j, fy, fx
-    cdef float max_val, current_val
+    cdef float max_val, valor_actual
     
+    # // INICIO BLOQUE GENERADO CON IA
     for it in prange(total_iters, nogil=True):
-        b = it // C
-        c = it % C
+        b = it // channels
+        c = it % channels
         
-        for i in range(out_h):
-            for j in range(out_w):
-                max_val = -1e30 # Muy pequeño
+        for i in range(out_heigth):
+            for j in range(out_width):
+                max_val = -1e30 
                 for fy in range(kernel_size):
                     for fx in range(kernel_size):
-                        current_val = input_tensor[b, c, i * stride + fy, j * stride + fx]
-                        if current_val > max_val:
-                            max_val = current_val
-                output[b, c, i, j] = max_val
+                        valor_actual = input_tensor[b, c, i * stride + fy, j * stride + fx]
+                        if valor_actual > max_val:
+                            max_val = valor_actual
+                salida[b, c, i, j] = max_val
+    # // FIN BLOQUE GENERADO CON IA
                 
-    return np.asarray(output)
-# // FIN BLOQUE GENERADO CON IA
-
-
+    return np.asarray(salida)

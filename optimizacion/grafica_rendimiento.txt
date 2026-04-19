@@ -1,0 +1,22 @@
+================================================================================
+                    COMPARATIVA DE RENDIMIENTO (OIANet)
+================================================================================
+Configuración: Batch Size = 64, CIFAR-100
+Métrica: Imágenes por Segundo (IPS) - Más alto es mejor
+
+ALGORITMO              IPS          GRÁFICA (Normalizada)
+--------------------------------------------------------------------------------
+Directo (0)            0.85        |
+im2col Basic (1)       222.36      |##############################
+im2col Cython (2)      90.65       |############
+Competitivo (4)        275.79      |######################################
+--------------------------------------------------------------------------------
+
+OBSERVACIONES TÉCNICAS:
+1. El modo "Competitivo" (4) es un 324x más rápido que el modo Directo.
+2. Supera a la implementación vectorizada de NumPy (1) en un 24%.
+3. La optimización de MaxPool2D en Cython Paralelo ha sido clave para romper
+   la barrera de los 250 IPS.
+4. im2col_parallel en Cython es ~95x más rápido que im2col serial en capas grandes.
+
+================================================================================

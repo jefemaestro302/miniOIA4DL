@@ -1,0 +1,1 @@
+Total time: 0.29s IPS: 223.64images/sec

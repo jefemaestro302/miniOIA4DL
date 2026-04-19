@@ -1,0 +1,15 @@
+Layer,Time
+Conv2D_1,7.4059
+BatchNorm2D_1,0.0044
+ReLU_1,0.0012
+MaxPool2D_1,0.0017
+Conv2D_2,24.5160
+BatchNorm2D_2,0.0019
+ReLU_2,0.0006
+MaxPool2D_2,0.0010
+Conv2D_3,23.9566
+BatchNorm2D_3,0.0010
+ReLU_3,0.0001
+MaxPool2D_3,0.0008
+Dense_1,0.0265
+Dense_2,0.0005

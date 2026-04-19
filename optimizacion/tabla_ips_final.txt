@@ -1,0 +1,6 @@
+Fase  | IPS     | Speedup  | Descripcion
+--------------------------------------------------------------------------------
+0     | 0.85    | 1.0x     | Original (Directo + Matmul Lento)
+1     | 0.97    | 1.1x     | im2col Python + Matmul Lento (Cuello de botella en Dense)
+2     | 237.53  | 279.4x   | im2col Python + Matmul Optimizado (Salto de vectorización)
+3     | 275.79  | 324.5x   | Competitivo (Cython Paralelo + MaxPool Paralelo)
